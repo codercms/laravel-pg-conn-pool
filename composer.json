@@ -1,0 +1,45 @@
+{
+  "name": "codercms/laravel-pg-conn-pool",
+  "description": "Laravel PostgreSQL connection pool",
+  "keywords": [
+    "laravel",
+    "postgres",
+    "connection",
+    "pool"
+  ],
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Dmitry K.",
+      "email": "coder1994@gmail.com",
+      "homepage": "https://dmitry-k.com"
+    }
+  ],
+  "require": {
+    "php": "^7.4",
+    "ext-swoole": "*",
+    "illuminate/database": "^6.0"
+  },
+  "require-dev": {
+    "swoole/ide-helper": "^4.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "Codercms\\LaravelPgConnPool\\": "src/"
+    }
+  },
+  "config": {
+    "preferred-install": "dist",
+    "sort-packages": true
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true,
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Codercms\\LaravelPgConnPool\\LaravelPgConnPoolServiceProvider"
+      ]
+    }
+  }
+}
