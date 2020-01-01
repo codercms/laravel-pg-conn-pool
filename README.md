@@ -19,7 +19,7 @@ When Laravel is running under Swoole each request is handled in a new coroutine.
 When DatabaseManager::connect is called, connection pool is initialized at once, and connection is returned from the pool 
 (Swoole Channel is used). Each coroutine will get a new connection from the pool.
 After request is handled by an application a connection is returned to the pool.
-This approach giving an ability to handle many requests (depends on the pool size) without blocking entire thread (worker).
+This approach gives an ability to handle many requests (depends on the pool size) without blocking an entire thread (worker).
 
 ## Usage
 Configuration (`config/database.php`):
