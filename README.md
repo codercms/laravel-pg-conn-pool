@@ -44,7 +44,7 @@ Configuration (`config/database.php`):
 ],
 ```
 
-Add `PooledConnectionReturnMiddleware` to the app global middleware.
+Add `PooledConnectionReturnMiddleware` to the app global middlewares list (`app/Http/Kernel.php` - `$middleware`).
 
 ## Building pdo_pgsql
 Dockerfile with build example of pdo_pgsql in this repo.
