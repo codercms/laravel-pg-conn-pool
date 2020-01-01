@@ -50,6 +50,7 @@ Add `PooledConnectionReturnMiddleware` to the app global middlewares list (`app/
 Dockerfile with build example of pdo_pgsql in this repo.
 
 How to compile pdo_pgsql for non-blocking (coroutine) mode:
+
 0. Install PHP dev package (php7.4-dev)
 1. Get swoole sources (for libs and headers) - https://github.com/swoole/swoole-src
 2. Get postgres sources (for libpq and headers) - https://github.com/postgres/postgres
