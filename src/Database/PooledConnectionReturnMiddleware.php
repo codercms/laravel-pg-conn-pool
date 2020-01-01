@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace Codercms\LaravelPgConnPool\Database;
 
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Database\DatabaseManager;
 
 /**
  * Useful for HTTP services, automatic return of taken connection
  */
 class PooledConnectionReturnMiddleware
 {
-    private PooledDatabaseManager $dbManager;
+    private DatabaseManager $dbManager;
 
     public function __construct(Container $container)
     {
@@ -26,6 +27,9 @@ class PooledConnectionReturnMiddleware
 
     public function terminate(): void
     {
-        $this->dbManager->freeTakenConnections();
+        // prevent crashing on systems without swoole
+        if ($this->dbManager instanceof PooledDatabaseManager) {
+            $this->dbManager->freeTakenConnections();
+        }
     }
 }

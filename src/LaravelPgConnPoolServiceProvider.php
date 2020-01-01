@@ -14,6 +14,11 @@ class LaravelPgConnPoolServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // do not register package on systems without swoole
+        if (!\extension_loaded('swoole')) {
+            return;
+        }
+
         // make alias of postgres connector for new driver
         $this->app->bind(
             'db.connector.pgsql_pool',
