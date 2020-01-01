@@ -4,8 +4,8 @@ Laravel PostgreSQL connection pool
 **WARNING**: Package is not production ready yet (only for testing purposes).
 
 Reasons:
-1. Gaining more performance to application
-2. Swoole Coroutine Postgres client isn't PDO compatible (it requires big existing code changes)
+1. Gaining more performance to the application
+2. Swoole Coroutine Postgres client isn't PDO compatible (it requires big changes in the existing code)
 and doesn't have such functionality like MySQL Coroutine client
 
 Requirements:
@@ -18,7 +18,8 @@ Requirements:
 When Laravel is running under Swoole each request is handled in a new coroutine.
 When DatabaseManager::connect is called, connection pool is initialized at once, and connection is returned from the pool 
 (Swoole Channel is used). Each coroutine will get a new connection from the pool.
-After request is handled by application connection must be returned to the pool.
+After request is handled by an application a connection is returned to the pool.
+This approach giving an ability to handle many requests (depends on the pool size) without blocking entire thread (worker).
 
 ## Usage
 Configuration (`config/database.php`):
