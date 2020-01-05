@@ -64,8 +64,8 @@ class PooledDatabaseManager extends DatabaseManager
             return;
         }
 
-        $pool->push($connection);
         $this->removeTakenConnection($connection);
+        $pool->push($connection);
     }
 
     /**
@@ -89,15 +89,18 @@ class PooledDatabaseManager extends DatabaseManager
      */
     public function connection($name = null): Connection
     {
-        $connName = $name ?? $this->getDefaultConnection();
+        $cid = \Swoole\Coroutine::getCid();
 
+        if (-1 === $cid) {
+            return parent::connection($name);
+        }
+
+        $connName = $name ?? $this->getDefaultConnection();
         $this->initPool($connName);
 
         if (!isset($this->pools[$connName])) {
             return parent::connection($name);
         }
-
-        $cid = \Swoole\Coroutine::getCid();
 
         if (isset($this->takenConnections[$connName][$cid])) {
             return $this->takenConnections[$connName][$cid];
