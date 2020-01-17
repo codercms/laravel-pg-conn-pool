@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Codercms\LaravelPgConnPool\Database;
+namespace Codercms\LaravelPgConnPool\Http\Middleware;
 
+use Codercms\LaravelPgConnPool\Database\PooledDatabaseManager;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\DatabaseManager;
 

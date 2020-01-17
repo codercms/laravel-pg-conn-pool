@@ -8,17 +8,13 @@ use Codercms\LaravelPgConnPool\Database\PooledDatabaseManager;
 use Codercms\LaravelPgConnPool\Database\PooledPostgresConnection;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Connectors\PostgresConnector;
+use Illuminate\Database\PostgresConnection;
 use Illuminate\Support\ServiceProvider;
 
 class LaravelPgConnPoolServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // do not register package on systems without swoole
-        if (!\extension_loaded('swoole')) {
-            return;
-        }
-
         // make alias of postgres connector for new driver
         $this->app->bind(
             'db.connector.pgsql_pool',
@@ -26,6 +22,19 @@ class LaravelPgConnPoolServiceProvider extends ServiceProvider
                 return new PostgresConnector();
             }
         );
+
+        // do not register package on systems without swoole
+        if (!\extension_loaded('swoole')) {
+            // fallback from pooled connection to default postgres connection
+            Connection::resolverFor(
+                'pgsql_pool',
+                function ($connection, $database, $prefix, $config) {
+                    return new PostgresConnection($connection, $database, $prefix, $config);
+                }
+            );
+
+            return;
+        }
 
         // create resolving of connection instance for new driver
         Connection::resolverFor(
