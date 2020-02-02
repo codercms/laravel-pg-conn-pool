@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Codercms\LaravelPgConnPool\Database;
+namespace Codercms\LaravelPgConnPool\Database\Connection;
 
 interface PooledConnectionInterface
 {
