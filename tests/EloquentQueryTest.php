@@ -41,6 +41,8 @@ class EloquentQueryTest extends TestCase
             $author = Author::query()->forceCreate(['name' => 'Cobra']);
             $books = $author->books;
 
+            $this->assertTrue($author->relationLoaded('books'));
+
             $poolSize = $this->getPoolSize();
             $this->disconnect();
         });
@@ -48,19 +50,24 @@ class EloquentQueryTest extends TestCase
         $this->assertEquals(self::POOL_SIZE, $poolSize);
     }
 
+    private function createFakeAuthors(): void
+    {
+        $now = date('Y-m-d H:i:s');
+
+        Author::query()->insert([
+            ['name' => 'Cobra', 'created_at' => $now],
+            ['name' => 'Black Mamba', 'created_at' => $now],
+            ['name' => 'Python', 'created_at' => $now],
+            ['name' => 'Taipan', 'created_at' => $now],
+        ]);
+    }
+
     public function testCursor(): void
     {
         $authors = [];
 
         \Co\run(function () use (&$authors) {
-            $now = date('Y-m-d H:i:s');
-
-            Author::query()->insert([
-                ['name' => 'Cobra', 'created_at' => $now],
-                ['name' => 'Black Mamba', 'created_at' => $now],
-                ['name' => 'Python', 'created_at' => $now],
-                ['name' => 'Taipan', 'created_at' => $now],
-            ]);
+            $this->createFakeAuthors();
 
             $lazyCollection = Author::query()->orderBy('id')->cursor();
 
@@ -87,14 +94,7 @@ class EloquentQueryTest extends TestCase
     public function testConnectionReturnedOnCursorError(): void
     {
         \Co\run(function () {
-            $now = date('Y-m-d H:i:s');
-
-            Author::query()->insert([
-                ['name' => 'Cobra', 'created_at' => $now],
-                ['name' => 'Black Mamba', 'created_at' => $now],
-                ['name' => 'Python', 'created_at' => $now],
-                ['name' => 'Taipan', 'created_at' => $now],
-            ]);
+            $this->createFakeAuthors();
 
             $lazyCollection = Author::query()->orderBy('id')->cursor();
 
