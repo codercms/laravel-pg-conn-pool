@@ -28,7 +28,6 @@ Also, a LazyConnection will not return the connection back to the pool if it is 
 However, upon completion of the transaction, a lazy connection will automatically return the real connection to the pool.
 
 Each coroutine will get a new connection from the pool.
-After request is handled by an application a connection is returned to the pool.
 This approach gives an ability to handle multiple requests (depends on the pool size) without blocking an entire thread (worker process).
 
 ## Usage
