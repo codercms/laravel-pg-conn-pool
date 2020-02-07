@@ -39,6 +39,8 @@ Configuration (`config/database.php`):
     'driver' => 'pgsql_pool',
     // how much connections is needed
     'poolSize' => 4,
+    // should the connection cache a PDO prepared statements? When true it gains more performance
+    'cachePdoStatements' => false,
 
     // default postgres driver config directives below
     'url' => env('DATABASE_URL'),
