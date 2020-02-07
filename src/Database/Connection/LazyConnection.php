@@ -8,6 +8,9 @@ use Closure;
 use Codercms\LaravelPgConnPool\Database\PooledDatabaseManager;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Connection;
+use Illuminate\Database\Query\Grammars\Grammar as QueryGrammar;
+use Illuminate\Database\Query\Processors\Processor;
+use Illuminate\Database\Schema\Grammars\Grammar as SchemaGrammar;
 
 /**
  * Lazy connection is a decorator for working with connection pool like it is a single connection
@@ -17,6 +20,7 @@ class LazyConnection extends Connection
 {
     private PooledDatabaseManager $manager;
     private string $connectionName;
+    private int $cid;
     private ?Connection $connection = null;
 
     /**
@@ -42,7 +46,22 @@ class LazyConnection extends Connection
         return $this->connectionName;
     }
 
-    private function getConnection(): Connection
+    public function setCid(int $cid): void
+    {
+        $this->cid = $cid;
+    }
+
+    public function getCid(): int
+    {
+        return $this->cid;
+    }
+
+    /**
+     * Get the connection from the pool
+     *
+     * @return Connection
+     */
+    public function getConnection(): Connection
     {
         if (null === $this->connection) {
             return $this->connection = $this->manager->getPooledConnection($this->connectionName);
@@ -51,7 +70,10 @@ class LazyConnection extends Connection
         return $this->connection;
     }
 
-    private function returnConnection(): void
+    /**
+     * Return taken connection to the pool
+     */
+    public function returnConnection(): void
     {
         if (null === $this->connection) {
             return;
@@ -62,10 +84,11 @@ class LazyConnection extends Connection
             return;
         }
 
-        $this->manager->returnPooledConnection($this->connection);
+        $connection = $this->connection;
         $this->connection = null;
 
-        $this->manager->returnLazyConnection($this);
+        $this->manager->forgetLazyConnection($this);
+        $this->manager->returnPooledConnection($connection);
     }
 
     private function forEachConnection(Closure $closure): void
@@ -74,6 +97,137 @@ class LazyConnection extends Connection
         foreach ($pool->getRawConnections() as $connection) {
             $closure($connection);
         }
+    }
+
+    /**
+     * Get the current PDO connection.
+     *
+     * @return \PDO
+     */
+    public function getPdo()
+    {
+        return $this->getConnection()->getPdo();
+    }
+
+    /**
+     * Get the current PDO connection parameter without executing any reconnect logic.
+     *
+     * @return \PDO|\Closure|null
+     */
+    public function getRawPdo()
+    {
+        return $this->getConnection()->getRawPdo();
+    }
+
+    /**
+     * Get the current PDO connection used for reading.
+     *
+     * @return \PDO
+     */
+    public function getReadPdo()
+    {
+        return $this->getConnection()->getReadPdo();
+    }
+
+    /**
+     * Get the current read PDO connection parameter without executing any reconnect logic.
+     *
+     * @return \PDO|\Closure|null
+     */
+    public function getRawReadPdo(): \PDO
+    {
+        return $this->getConnection()->getRawReadPdo();
+    }
+
+    /**
+     * Set the PDO connection.
+     *
+     * @param  \PDO|\Closure|null  $pdo
+     * @return $this
+     */
+    public function setPdo($pdo)
+    {
+        if (null !== $this->connection) {
+            $this->connection->setPdo($pdo);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Set the PDO connection used for reading.
+     *
+     * @param  \PDO|\Closure|null  $pdo
+     * @return $this
+     */
+    public function setReadPdo($pdo)
+    {
+        if (null !== $this->connection) {
+            $this->connection->setReadPdo($pdo);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Get the Doctrine DBAL database connection instance.
+     *
+     * @return \Doctrine\DBAL\Connection
+     */
+    public function getDoctrineConnection()
+    {
+        return $this->getConnection()->getDoctrineConnection();
+    }
+
+    /**
+     * Set the query grammar used by the connection.
+     *
+     * @param  \Illuminate\Database\Query\Grammars\Grammar  $grammar
+     * @return $this
+     */
+    public function setQueryGrammar(QueryGrammar $grammar)
+    {
+        $this->forEachConnection(function (Connection $connection) use ($grammar) {
+            $connection->setQueryGrammar($grammar);
+        });
+
+        parent::setQueryGrammar($grammar);
+
+        return $this;
+    }
+
+    /**
+     * Set the schema grammar used by the connection.
+     *
+     * @param  \Illuminate\Database\Schema\Grammars\Grammar  $grammar
+     * @return $this
+     */
+    public function setSchemaGrammar(SchemaGrammar $grammar)
+    {
+        $this->forEachConnection(function (Connection $connection) use ($grammar) {
+            $connection->setSchemaGrammar($grammar);
+        });
+
+        parent::setSchemaGrammar($grammar);
+
+        return $this;
+    }
+
+    /**
+     * Set the query post processor used by the connection.
+     *
+     * @param  \Illuminate\Database\Query\Processors\Processor  $processor
+     * @return $this
+     */
+    public function setPostProcessor(Processor $processor)
+    {
+        $this->forEachConnection(function (Connection $connection) use ($processor) {
+            $connection->setPostProcessor($processor);
+        });
+
+        parent::setPostProcessor($processor);
+
+        return $this;
     }
 
     /**
@@ -103,6 +257,21 @@ class LazyConnection extends Connection
     }
 
     /**
+     * Set the reconnect instance on the connection.
+     *
+     * @param  callable  $reconnector
+     * @return $this
+     */
+    public function setReconnector(callable $reconnector)
+    {
+        $this->forEachConnection(function (Connection $connection) use ($reconnector) {
+            $connection->setReconnector($reconnector);
+        });
+
+        return $this;
+    }
+
+    /**
      * Set the event dispatcher instance on the connection.
      *
      * @param  \Illuminate\Contracts\Events\Dispatcher  $events
@@ -114,7 +283,7 @@ class LazyConnection extends Connection
             $connection->setEventDispatcher($events);
         });
 
-        $this->events = $events;
+        parent::setEventDispatcher($events);
 
         return $this;
     }
@@ -130,7 +299,7 @@ class LazyConnection extends Connection
             $connection->unsetEventDispatcher();
         });
 
-        $this->events = null;
+        parent::unsetEventDispatcher();
     }
 
     /**
@@ -143,6 +312,8 @@ class LazyConnection extends Connection
         $this->forEachConnection(function (Connection $connection) {
             $connection->enableQueryLog();
         });
+
+        parent::enableQueryLog();
     }
 
     /**
@@ -155,6 +326,8 @@ class LazyConnection extends Connection
         $this->forEachConnection(function (Connection $connection) {
             $connection->disableQueryLog();
         });
+
+        parent::disableQueryLog();
     }
 
     /**
@@ -213,7 +386,7 @@ class LazyConnection extends Connection
             return $this->connection->pretending();
         }
 
-        return $this->pretending;
+        return parent::pretending();
     }
 
     /**

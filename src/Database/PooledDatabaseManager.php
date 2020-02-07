@@ -15,26 +15,30 @@ use Illuminate\Database\Query\Processors\PostgresProcessor;
 class PooledDatabaseManager extends DatabaseManager
 {
     /**
+     * Connection pool list (key = pool name, value = pool object)
+     *
      * @var Pool[]
      */
     private array $pools = [];
 
     /**
-     * First level key - connection name
-     * Second level key - coroutine id (cid)
-     *
-     * Caching of taken connections is needed to prevent pool drying when using EloquentORM
-     *
-     * @var LazyConnection[][]
-     */
-    private array $takenConnections = [];
-
-    /**
-     * Cache of configured LazyConnections used for
+     * Cache of configured LazyConnections that are used for the "connection" method
      *
      * @var LazyConnection[]
      */
     private array $cachedLazyConnections = [];
+
+    /**
+     * Taken lazy connections cache
+     * It's needed because the Eloquent ORM calling the "connection" method multiple times
+     * instead of caching connection object
+     *
+     * Cache is stored in format like: [$name][$cid]
+     * Where $name is connection name, cid is coroutine id
+     *
+     * @var LazyConnection[][]
+     */
+    private array $takenConnections = [];
 
     public function __construct($app, ConnectionFactory $factory)
     {
@@ -73,13 +77,18 @@ class PooledDatabaseManager extends DatabaseManager
             return parent::connection($name);
         }
 
-        // if lazy connection is already created for the current coroutine there is no need to create new one
+        // Get a connection that is already in use by the current coroutine
         $lazyConnection = $this->takenConnections[$name][$cid] ?? null;
-        if (null !== $lazyConnection) {
-            return $lazyConnection;
+        // if coroutine has not used lazy connection, let's create new one
+        if (null === $lazyConnection) {
+            $lazyConnection = clone $this->cachedLazyConnections[$name];
+            $lazyConnection->setCid($cid);
+
+            // remember a lazy connection for the current coroutine
+            $this->takenConnections[$name][$cid] = $lazyConnection;
         }
 
-        return $this->takenConnections[$name][$cid] = clone $this->cachedLazyConnections[$name];
+        return $lazyConnection;
     }
 
     /**
@@ -99,11 +108,8 @@ class PooledDatabaseManager extends DatabaseManager
             return;
         }
 
-        // forget lazy connections
-        $this->takenConnections[$name] = [];
-
-        // forget pool and connections (for backward compatibility)
-        unset($this->pools[$name], $this->connections[$name]);
+        // forget pool
+        unset($this->pools[$name]);
     }
 
     /**
@@ -122,6 +128,12 @@ class PooledDatabaseManager extends DatabaseManager
             ->setReadPdo($fresh->getReadPdo());
     }
 
+    /**
+     * Get connection pool
+     *
+     * @param string|null $name
+     * @return Pool
+     */
     public function getPool(?string $name = null): Pool
     {
         $name = $name ?? $this->getDefaultConnection();
@@ -147,17 +159,6 @@ class PooledDatabaseManager extends DatabaseManager
     }
 
     /**
-     * @param LazyConnection $lazyConnection
-     */
-    public function returnLazyConnection(LazyConnection $lazyConnection): void
-    {
-        $name = $lazyConnection->getName();
-        $cid = \Swoole\Coroutine::getCid();
-
-        unset($this->takenConnections[$name][$cid]);
-    }
-
-    /**
      * @param PooledConnectionInterface|Connection $connection
      */
     public function returnPooledConnection(PooledConnectionInterface $connection): void
@@ -171,18 +172,6 @@ class PooledDatabaseManager extends DatabaseManager
         }
 
         $pool->push($connection);
-    }
-
-    /**
-     * Free all taken connections by coroutine
-     */
-    public function freeTakenConnections(): void
-    {
-        $cid = \Swoole\Coroutine::getCid();
-
-        foreach ($this->takenConnections as $name => $connections) {
-            unset($this->takenConnections[$name][$cid]);
-        }
     }
 
     /**
@@ -212,6 +201,8 @@ class PooledDatabaseManager extends DatabaseManager
             $lazyConnection->setEventDispatcher($this->app['events']);
         }
 
+        $lazyConnection->setReconnector($this->reconnector);
+
         switch ($config['driver']) {
             case 'pgsql_pool':
                 $lazyConnection->setQueryGrammar(new PostgresGrammar());
@@ -234,5 +225,25 @@ class PooledDatabaseManager extends DatabaseManager
             $this->makeConnection($database),
             $type
         );
+    }
+
+    public function forgetLazyConnection(LazyConnection $connection): void
+    {
+        $cid = $connection->getCid();
+        $name = $connection->getName();
+
+        unset($this->takenConnections[$name][$cid]);
+    }
+
+    /**
+     * Free all taken connections by coroutine
+     */
+    public function freeTakenConnections(): void
+    {
+        $cid = \Swoole\Coroutine::getCid();
+
+        foreach ($this->takenConnections as $name => $connections) {
+            unset($this->takenConnections[$name][$cid]);
+        }
     }
 }

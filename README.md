@@ -6,7 +6,9 @@ Laravel PostgreSQL connection pool
 Reasons:
 1. Gaining more performance to the application
 2. Swoole Coroutine Postgres client isn't PDO compatible (it requires big changes in the existing code)
-and doesn't have such functionality like MySQL Coroutine client
+and doesn't have such functionality like a MySQL Coroutine client
+3. Don't want to implement own Swoole PostgreSQL Coroutine client driver for Laravel
+* However this package can be used with any database driver.
 
 Requirements:
 1. PHP 7.4
@@ -16,8 +18,15 @@ Requirements:
 
 ## How it works?
 When Laravel is running under Swoole each request is handled in a new coroutine.
-When DatabaseManager::connect is called, the connection pool is initialized at once, 
-and a connection is taken from the pool (Swoole Channel is used). 
+When DatabaseManager::connect is called, the connection pool is initialized at once and LazyConnection object is returned.
+
+What is LazyConnection? 
+LazyConnection is an abstraction over a pool that allows you to work with the pool as if it were a regular Laravel database connection.
+A LazyConnection will not ask the pool for a real connection until it needs to execute an SQL query. 
+After the SQL query is executed, the real connection will be returned back to the pool. 
+Also, a LazyConnection will not return the connection back to the pool if it is in a transaction. 
+However, upon completion of the transaction, a lazy connection will automatically return the real connection to the pool.
+
 Each coroutine will get a new connection from the pool.
 After request is handled by an application a connection is returned to the pool.
 This approach gives an ability to handle multiple requests (depends on the pool size) without blocking an entire thread (worker process).
@@ -47,6 +56,25 @@ Configuration (`config/database.php`):
 ```
 
 Add `PooledConnectionReturnMiddleware` to the app global middlewares list (`app/Http/Kernel.php` - `$middleware`).
+
+## Notes
+* When you use following methods from LazyConnection, you should return connection manually, 
+by calling $lazyConnection->returnConnection();
+    * getConnection
+    * getPdo
+    * getRawPdo
+    * getReadPdo
+    * getRawReadPdo
+    * getDoctrineConnection
+
+* Since the connection pool represents a lot of connection, when logging SQL queries, 
+  the "getQueryLog" method will return query log with the ID of the connection that executed the query
+
+* Following methods on LazyConnection may not work (because they rely on the real connection):
+    * setPdo
+    * setReadPdo
+    * disconnect
+    * reconnect
 
 ## Building pdo_pgsql
 Dockerfile with build example of pdo_pgsql in this repo.

@@ -22,6 +22,35 @@ class TestCase extends \Orchestra\Testbench\TestCase
         $this->db = $this->app->make('db');
     }
 
+    /**
+     * Run test cases in the coroutine
+     *
+     * @return void|null
+     * @throws \Throwable
+     */
+    protected function runTest()
+    {
+        $result = null;
+        /* @var \Throwable|null $ex */
+        $ex = null;
+
+        \Co\run(function () use (&$result, &$ex) {
+            try {
+                $result = parent::runTest();
+            } catch (\Throwable $e) {
+                $ex = $e;
+            }
+
+            $this->disconnect();
+        });
+
+        if (null !== $ex) {
+            throw $ex;
+        }
+
+        return $result;
+    }
+
     protected function disconnect(): void
     {
         $this->db->disconnect('pgsql');
