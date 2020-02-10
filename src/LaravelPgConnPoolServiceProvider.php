@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Codercms\LaravelPgConnPool;
 
 use Codercms\LaravelPgConnPool\Database\PooledDatabaseManager;
-use Codercms\LaravelPgConnPool\Database\PooledPostgresConnection;
+use Codercms\LaravelPgConnPool\Database\Connection\PooledPostgresConnection;
 use Illuminate\Database\Connection;
 use Illuminate\Database\Connectors\PostgresConnector;
 use Illuminate\Database\PostgresConnection;
