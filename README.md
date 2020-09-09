@@ -23,7 +23,7 @@ Configuration (`config/database.php`):
     'max_active' => 4,
     // minimum number of active connections
     'min_active' => 2,
-    // how mush time to wait for an avaiable connection
+    // how much time to wait for an avaiable connection
     'max_wait_time' => 5.0, // 5 seconds
     // automatically close connections which are idle more than a minute
     'max_idle_time' => 60,
