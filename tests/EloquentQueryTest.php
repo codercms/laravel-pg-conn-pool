@@ -6,6 +6,7 @@ namespace Codercms\LaravelPgConnPool\Tests;
 
 use Codercms\LaravelPgConnPool\Tests\Models\Author;
 use Codercms\LaravelPgConnPool\Tests\Models\Book;
+use Swoole\Coroutine;
 
 use function date;
 
@@ -25,7 +26,7 @@ class EloquentQueryTest extends TestCase
 
         Author::query()->with('books')->get();
 
-        $this->assertEquals(self::POOL_SIZE, $this->getPoolSize());
+        self::assertSame(self::POOL_SIZE, $this->getPoolSize());
     }
 
     public function testConnectionReturnedOnRelationLazyLoading(): void
@@ -33,9 +34,9 @@ class EloquentQueryTest extends TestCase
         $author = Author::query()->forceCreate(['name' => 'Cobra']);
         $books = $author->books;
 
-        $this->assertTrue($author->relationLoaded('books'));
+        self::assertTrue($author->relationLoaded('books'));
 
-        $this->assertEquals(self::POOL_SIZE, $this->getPoolSize());
+        self::assertSame(self::POOL_SIZE, $this->getPoolSize());
     }
 
     private function createFakeAuthors(): void
@@ -57,20 +58,20 @@ class EloquentQueryTest extends TestCase
         $lazyCollection = Author::query()->orderBy('id')->cursor();
 
         // check connection pool size before cursor traversing
-        $this->assertEquals(self::POOL_SIZE, $this->getPoolSize());
+        self::assertSame(self::POOL_SIZE, $this->getPoolSize());
 
         foreach ($lazyCollection as $author) {
             // check connection pool size while cursor traversing
-            $this->assertEquals(self::POOL_SIZE - 1, $this->getPoolSize());
+            self::assertSame(self::POOL_SIZE, $this->getPoolSize());
 
             $authors[] = $author->name;
         }
 
         // check connection pool size after cursor traversing
-        $this->assertEquals(self::POOL_SIZE, $this->getPoolSize());
+        self::assertSame(self::POOL_SIZE, $this->getPoolSize());
 
-        $this->assertCount(4, $authors);
-        $this->assertEquals(['Cobra', 'Black Mamba', 'Python', 'Taipan'], $authors);
+        self::assertCount(4, $authors);
+        self::assertSame(['Cobra', 'Black Mamba', 'Python', 'Taipan'], $authors);
     }
 
     public function testConnectionReturnedOnCursorError(): void
@@ -80,7 +81,7 @@ class EloquentQueryTest extends TestCase
         $lazyCollection = Author::query()->orderBy('id')->cursor();
 
         // check connection pool size before cursor traversing
-        $this->assertEquals(self::POOL_SIZE, $this->getPoolSize());
+        self::assertSame(self::POOL_SIZE, $this->getPoolSize());
 
         try {
             foreach ($lazyCollection as $author) {
@@ -89,6 +90,35 @@ class EloquentQueryTest extends TestCase
         } catch (\RuntimeException $e) {}
 
         // check connection pool size after cursor traversing
-        $this->assertEquals(self::POOL_SIZE, $this->getPoolSize());
+        self::assertSame(self::POOL_SIZE, $this->getPoolSize());
+    }
+
+    public function testConcurrency(): void
+    {
+        $ch = new Coroutine\Channel(2);
+
+        $func = static function (string $name) use ($ch) {
+            try {
+                $ch->push(Author::query()->forceCreate(['name' => $name]));
+            } catch (\Throwable $e) {
+                $ch->push($e);
+            }
+        };
+
+        Coroutine::create($func, 'Cobra');
+        Coroutine::create($func, 'Taipan');
+
+        $names = [];
+
+        for ($i = 0; $i < $ch->capacity; $i++) {
+            $result = $ch->pop();
+
+            self::assertInstanceOf(Author::class, $result);
+
+            $names[] = $result->name;
+        }
+
+        self::assertContains('Cobra', $names);
+        self::assertContains('Taipan', $names);
     }
 }

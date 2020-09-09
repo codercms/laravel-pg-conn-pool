@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Codercms\LaravelPgConnPool\Tests;
 
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Database\QueryException;
 
 class BehaviorTest extends TestCase
 {
@@ -19,12 +20,7 @@ class BehaviorTest extends TestCase
         $log = $this->db->getQueryLog();
         $this->db->disableQueryLog();
 
-        $this->assertCount(2, $log);
-        $this->assertArrayHasKey('id', $log[0]);
-
-        $nextId = $log[0]['id'] + 1;
-
-        $this->assertEquals($nextId, $log[1]['id']);
+        self::assertCount(2, $log);
     }
 
     public function testListen(): void
@@ -32,93 +28,29 @@ class BehaviorTest extends TestCase
         $log = [];
 
         $this->db->listen(function (QueryExecuted $event) use (&$log) {
-            $log[] = ['id' => $event->connection->getId(), 'sql' => $event->sql];
+            $log[] = ['sql' => $event->sql];
         });
 
         $connection = $this->db->connection();
         $connection->unprepared('SELECT 1');
         $connection->unprepared('SELECT 2');
 
-        $this->assertCount(2, $log);
-        $this->assertArrayHasKey('id', $log[0]);
-
-        $nextId = $log[0]['id'] + 1;
-
-        $this->assertEquals($nextId, $log[1]['id']);
+        self::assertCount(2, $log);
     }
 
-    public function testConnectionIsNotTakenFromThePool(): void
+    public function testQueryException(): void
     {
-        $this->db->connection();
-
-        $this->assertEquals(self::POOL_SIZE, $this->getPoolSize());
-    }
-
-    public function testGetConnection(): void
-    {
-        $lazyConnection = $this->db->connection();
-        $connection = $lazyConnection->getConnection();
-
-        $this->assertEquals(self::POOL_SIZE - 1, $this->getPoolSize());
-
-        $lazyConnection->returnConnection();
-
-        $this->assertEquals(self::POOL_SIZE, $this->getPoolSize());
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage('SQLSTATE[42P01]: Undefined table: 7 ERROR: relation "not_existing_table" does not exist');
     }
 
     public function testGetPdo(): void
     {
-        $connection = $this->db->connection();
-        $pdo = $connection->getPdo();
+        $pdo = $this->db->getPdo();
+        $stmt = $pdo->prepare('SELECT :binding AS t');
+        $stmt->bindValue(':binding', '123');
+        $stmt->execute();
 
-        $this->assertEquals(self::POOL_SIZE - 1, $this->getPoolSize());
-
-        $connection->returnConnection();
-
-        $this->assertEquals(self::POOL_SIZE, $this->getPoolSize());
-    }
-
-    public function testFreeTakenConnections(): void
-    {
-        (function () {
-            $lazyConnection = $this->db->connection();
-            $lazyConnection->getConnection();
-
-            $this->db->freeTakenConnections();
-        })();
-
-        $this->assertEquals(self::POOL_SIZE, $this->getPoolSize());
-    }
-
-    public function testForgetLazyConnection(): void
-    {
-        (function () {
-            $lazyConnection = $this->db->connection();
-            $lazyConnection->getConnection();
-
-            $this->db->forgetLazyConnection($lazyConnection);
-        })();
-
-        $this->assertEquals(self::POOL_SIZE, $this->getPoolSize());
-    }
-
-    /**
-     * @doesNotPerformAssertions
-     */
-    public function testReconnectOnDisconnected(): void
-    {
-        $pool = $this->db->getPool('pgsql');
-        for ($i = 0; $i < self::POOL_SIZE; $i++) {
-            $connection = $pool->get();
-            $connection->disconnect();
-            $pool->push($connection);
-        }
-
-        $lazyConnection = $this->db->connection();
-
-        // test everything is fine
-        for ($i = 0; $i < self::POOL_SIZE; $i++) {
-            $lazyConnection->unprepared('SELECT 1');
-        }
+        self::assertSame('123', $stmt->fetch()->t);
     }
 }

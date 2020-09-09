@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace Codercms\LaravelPgConnPool\Tests;
 
+use Codercms\LaravelPgConnPool\Database\PoolManager;
 use Codercms\LaravelPgConnPool\LaravelPgConnPoolServiceProvider;
+use Illuminate\Database\DatabaseManager;
+use MakiseCo\Postgres\PostgresPool;
 
-class TestCase extends \Orchestra\Testbench\TestCase
+class TestCase extends CoroTestCase
 {
-    /**
-     * @var \Codercms\LaravelPgConnPool\Database\PooledDatabaseManager
-     */
-    protected $db;
+    protected DatabaseManager $db;
 
     protected const POOL_SIZE = 2;
 
@@ -22,43 +22,17 @@ class TestCase extends \Orchestra\Testbench\TestCase
         $this->db = $this->app->make('db');
     }
 
-    /**
-     * Run test cases in the coroutine
-     *
-     * @return void|null
-     * @throws \Throwable
-     */
-    protected function runTest()
+    protected function getPool(): PostgresPool
     {
-        $result = null;
-        /* @var \Throwable|null $ex */
-        $ex = null;
+        /** @var PoolManager $poolMgr */
+        $poolMgr = $this->app->get(PoolManager::class);
 
-        \Co\run(function () use (&$result, &$ex) {
-            try {
-                $result = parent::runTest();
-            } catch (\Throwable $e) {
-                $ex = $e;
-            }
-
-            $this->disconnect();
-        });
-
-        if (null !== $ex) {
-            throw $ex;
-        }
-
-        return $result;
-    }
-
-    protected function disconnect(): void
-    {
-        $this->db->disconnect('pgsql');
+        return $poolMgr->getPool('pgsql');
     }
 
     protected function getPoolSize(): int
     {
-        return $this->db->getPool('pgsql')->getSize();
+        return $this->getPool()->getIdleCount();
     }
 
     /**
@@ -72,12 +46,13 @@ class TestCase extends \Orchestra\Testbench\TestCase
         $app['config']->set('database.default', 'pgsql');
         $app['config']->set('database.connections.pgsql', [
             'driver'   => 'pgsql_pool',
-            'poolSize' => self::POOL_SIZE,
-            'host' => '127.0.0.1',
-            'database' => 'forge',
-            'username' => 'forge',
-            'password' => 'secret',
-            'port' => 5433,
+            'max_active' => self::POOL_SIZE,
+            'min_active' => self::POOL_SIZE,
+            'host' => 'host.docker.internal',
+            'database' => 'makise',
+            'username' => 'makise',
+            'password' => 'el-psy-congroo',
+            'port' => 5432,
         ]);
     }
 

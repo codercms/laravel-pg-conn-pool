@@ -20,7 +20,8 @@
     "php": "^7.4",
     "ext-pdo": "*",
     "ext-swoole": "*",
-    "illuminate/database": "^6.0"
+    "illuminate/database": "^6.0",
+    "makise-co/postgres": "^2.0"
   },
   "require-dev": {
     "laravel/framework": "^6.0",
