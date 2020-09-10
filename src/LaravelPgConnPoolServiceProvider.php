@@ -29,16 +29,33 @@ class LaravelPgConnPoolServiceProvider extends ServiceProvider
                         $config['name'] = $name;
 
                         return new PooledPostgresConnection(
-                            $poolManager->getPool($name, $config),
+                            $poolManager->create($name, $config),
                             $config
                         );
                     }
                 );
             });
 
-            $this->app->terminating(static function () use ($poolManager) {
-                $poolManager->close();
-            });
+            if (class_exists(\SwooleTW\Http\Coroutine\Context::class)) {
+                // swooletw laravel-swoole package detected
+                $this->app->terminating(static function () use ($poolManager) {
+                    $request = \SwooleTW\Http\Coroutine\Context::getData('_request');
+
+                    if ($request === null) {
+                        $poolManager->close();
+                    }
+                });
+
+                /** @var \Illuminate\Events\Dispatcher $eventDispatcher */
+                $eventDispatcher = $this->app->make('events');
+                $eventDispatcher->listen('swoole.workerStop', static function () use ($poolManager) {
+                    $poolManager->close();
+                });
+            } else {
+                $this->app->terminating(static function () use ($poolManager) {
+                    $poolManager->close();
+                });
+            }
         } else {
             // do not register package on systems without Swoole
             $this->app->bind(

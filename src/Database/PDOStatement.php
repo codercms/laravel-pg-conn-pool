@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Codercms\LaravelPgConnPool\Database;
 
+use Closure;
 use MakiseCo\SqlCommon\Contracts\CommandResult;
 use MakiseCo\SqlCommon\Contracts\ResultSet;
 use MakiseCo\SqlCommon\Contracts\Statement;
@@ -17,7 +18,7 @@ class PDOStatement extends \PDOStatement
 {
     use SqlErrorHelper;
 
-    private Statement $statement;
+    private ?Statement $statement;
     private array $params = [];
     private int $fetchMode = ResultSet::FETCH_OBJECT;
 
@@ -26,9 +27,29 @@ class PDOStatement extends \PDOStatement
      */
     private $result;
 
-    public function __construct(Statement $statement)
+    private ?Closure $release;
+
+    public function __construct(Statement $statement, Closure $release)
     {
         $this->statement = $statement;
+        $this->release = $release;
+    }
+
+    public function __destruct()
+    {
+        $this->close();
+    }
+
+    private function close(): void
+    {
+        if ($this->statement !== null) {
+            $release = $this->release;
+
+            $this->release = null;
+            $this->statement = null;
+
+            $release();
+        }
     }
 
     public function bindValue($parameter, $value, $data_type = 2): void
@@ -44,10 +65,18 @@ class PDOStatement extends \PDOStatement
 
     public function execute($args = null): bool
     {
+        if ($this->statement === null) {
+            throw new \RuntimeException('Statement is closed');
+        }
+
         try {
             $this->result = $this->statement->execute($this->params);
+            $this->params = [];
         } catch (Throwable $e) {
             throw self::handleQueryError($e);
+        } finally {
+            // free connection as early as possible
+            $this->close();
         }
 
         return true;
@@ -62,13 +91,13 @@ class PDOStatement extends \PDOStatement
         return $this->result->fetch($this->fetchMode);
     }
 
-    public function fetchAll($fetch_style = null, $fetch_argument = null, $ctor_args = null)
+    public function fetchAll($fetch_style = null, $fetch_argument = null, $ctor_args = null): array
     {
         if (!$this->result instanceof ResultSet) {
             return [];
         }
 
-       return $this->result->fetchAll($this->fetchMode);
+        return $this->result->fetchAll($this->fetchMode);
     }
 
     public function rowCount(): int

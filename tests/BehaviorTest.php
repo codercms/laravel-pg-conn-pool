@@ -42,6 +42,8 @@ class BehaviorTest extends TestCase
     {
         $this->expectException(QueryException::class);
         $this->expectExceptionMessage('SQLSTATE[42P01]: Undefined table: 7 ERROR: relation "not_existing_table" does not exist');
+
+        $this->db->connection()->select('SELECT * FROM not_existing_table');
     }
 
     public function testGetPdo(): void

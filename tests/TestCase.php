@@ -27,7 +27,7 @@ class TestCase extends CoroTestCase
         /** @var PoolManager $poolMgr */
         $poolMgr = $this->app->get(PoolManager::class);
 
-        return $poolMgr->getPool('pgsql');
+        return $poolMgr->get('pgsql');
     }
 
     protected function getPoolSize(): int

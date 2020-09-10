@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace Codercms\LaravelPgConnPool\Database;
 
+use Closure;
 use MakiseCo\Postgres\Contracts\Link;
 use MakiseCo\Postgres\Contracts\Transaction;
 use MakiseCo\Postgres\Driver\Pq\PqBufferedResultSet;
 use MakiseCo\SqlCommon\Contracts\CommandResult;
+use PDO;
+use RuntimeException;
+use Throwable;
 
-class PDOWrapper extends \PDO
+class PDOWrapper extends PDO
 {
     use SqlErrorHelper;
 
@@ -18,10 +22,25 @@ class PDOWrapper extends \PDO
     private ?Transaction $transaction = null;
     private int $transactionLevel = 0;
 
-    /** @noinspection MagicMethodsValidityInspection */
+    private int $refCount = 0;
+    private Closure $release;
+
+    /**
+     * @param PostgresPool $pool
+     *
+     * @noinspection MagicMethodsValidityInspection
+     * @noinspection PhpMissingParentConstructorInspection
+     */
     public function __construct(PostgresPool $pool)
     {
         $this->pool = $pool;
+
+        $refCount = &$this->refCount;
+        $this->release = function () use (&$refCount) {
+            if (--$refCount === 0) {
+                $this->returnConnection();
+            }
+        };
     }
 
     public function __destruct()
@@ -31,7 +50,7 @@ class PDOWrapper extends \PDO
 
             try {
                 $this->transaction = null;
-            } catch (\Throwable $e) {
+            } catch (Throwable $e) {
                 // ignore transaction close errors
             }
         }
@@ -42,7 +61,7 @@ class PDOWrapper extends \PDO
     private function returnConnection(): void
     {
         // do not return connection while in transaction
-        if ($this->transaction !== null && $this->transactionLevel > 0) {
+        if ($this->transaction !== null || $this->transactionLevel > 0) {
             return;
         }
 
@@ -56,11 +75,7 @@ class PDOWrapper extends \PDO
 
     private function getConnection(): Link
     {
-        if ($this->connection === null) {
-            return $this->connection = $this->pool->pop();
-        }
-
-        return $this->connection;
+        return $this->connection ??= $this->pool->pop();
     }
 
     public function isAlive(): bool
@@ -78,7 +93,7 @@ class PDOWrapper extends \PDO
 
         try {
             $result = $connection->query($statement);
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             throw self::handleQueryError($e);
         } finally {
             $this->returnConnection();
@@ -101,17 +116,23 @@ class PDOWrapper extends \PDO
 
         try {
             $stmt = $connection->prepare($statement);
-        } catch (\Throwable $e) {
-            throw self::handleQueryError($e);
-        } finally {
+        } catch (Throwable $e) {
             $this->returnConnection();
+
+            throw self::handleQueryError($e);
         }
 
-        return new PDOStatement($stmt);
+        ++$this->refCount;
+
+        return new PDOStatement($stmt, $this->release);
     }
 
     public function beginTransaction(): void
     {
+        if ($this->transaction !== null) {
+            throw new RuntimeException('Transaction already started, use createSavepoint');
+        }
+
         $connection = $this->getConnection();
 
         $this->transaction = $connection->beginTransaction();
@@ -121,7 +142,7 @@ class PDOWrapper extends \PDO
     public function createSavepoint(string $name): void
     {
         if (null === $this->transaction) {
-            throw new \RuntimeException('Transaction is not started');
+            throw new RuntimeException('Transaction is not started');
         }
 
         $this->transaction->createSavepoint($name);
@@ -131,7 +152,7 @@ class PDOWrapper extends \PDO
     public function rollbackTo(int $level, string $name): void
     {
         if (null === $this->transaction) {
-            throw new \RuntimeException('Transaction is not started');
+            throw new RuntimeException('Transaction is not started');
         }
 
         $this->transaction->rollbackTo($name);
@@ -140,6 +161,10 @@ class PDOWrapper extends \PDO
 
     public function commit(): bool
     {
+        if (null === $this->transaction) {
+            throw new RuntimeException('Transaction is not started');
+        }
+
         $this->transaction->commit();
         $this->transaction = null;
         $this->transactionLevel = 0;
@@ -151,6 +176,10 @@ class PDOWrapper extends \PDO
 
     public function rollBack(): bool
     {
+        if (null === $this->transaction) {
+            throw new RuntimeException('Transaction is not started');
+        }
+
         $this->transaction->rollback();
         $this->transaction = null;
         $this->transactionLevel = 0;

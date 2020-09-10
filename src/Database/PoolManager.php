@@ -34,9 +34,15 @@ class PoolManager
         }
     }
 
-    public function getPool(string $name, array $config = []): PostgresPool
+    public function get(string $name): ?PostgresPool
     {
-        if (!array_key_exists($name, $this->pools)) {
+        return $this->pools[$name] ?? null;
+    }
+
+    public function create(string $name, array $config = []): PostgresPool
+    {
+        $pool = $this->get($name);
+        if (null === $pool) {
             $connConfig = $this->getConnectionConfig($config);
 
             $this->pools[$name] = $pool = new PostgresPool($connConfig);
@@ -45,11 +51,9 @@ class PoolManager
             $this->configurePool($pool, $poolConfig);
 
             $pool->init();
-
-            return $pool;
         }
 
-        return $this->pools[$name];
+        return $pool;
     }
 
     private function configurePool(PostgresPool $pool, array $config): void
@@ -82,6 +86,9 @@ class PoolManager
                 unset($config[$key]);
             }
         }
+
+        // do not use unbuffered mode in Laravel
+        $config['unbuffered'] = false;
 
         return (new ConnectionConfigBuilder())
             ->fromArray($config)
